@@ -1,0 +1,14 @@
+@main("Welcome to Play") {
+  <h1>Login</h1>
+
+@*  @helper.form(action = routes.HomeController.addUser()) {
+    @helper.CSRF.formField
+    @helper.inputText(form("First name:"))
+    @helper.inputText(form("Last name:"))
+    @helper.inputText(form("Username:"))
+    @helper.inputPassword(form("Password:"))
+    <button>Register</button>
+  }
+@(form: Form[UserDataReg])(implicit request: MessagesRequestHeader)
+*@
+}
