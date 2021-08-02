@@ -1,47 +1,39 @@
 package controllers
 
-import auth.{AuthAction, AuthService, UserRequest}
-import dto.{FriendshipDto, LoginDto, UserDto}
-import models.User
+import auth.{AuthAction, AuthService}
+import dto.{LoginDto, UserDto}
 import play.api.libs.json.Format.GenericFormat
-import play.api.libs.json.{JsError, JsValue, Json, Reads}
-import play.api.mvc.{AbstractController, AnyContent, ControllerComponents}
+import play.api.libs.json.{JsError, Json}
+import play.api.mvc.{AbstractController, ControllerComponents}
 import services.UserService
 
 import java.nio.file.Paths
 import javax.inject._
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 
 @Singleton
-class UserController @Inject() (cc: ControllerComponents, userService: UserService,
-                                authService: AuthService, authAction: AuthAction) extends AbstractController(cc) {
+class UserController @Inject()(cc: ControllerComponents, userService: UserService,
+                               authService: AuthService, authAction: AuthAction) extends AbstractController(cc) {
 
-  def login() = Action(parse.json) { implicit request =>
-    val user = request.body.validate[LoginDto]
-    user.fold(
+  def login() = Action(parse.json).async { implicit request =>
+    val login = request.body.validate[LoginDto]
+    login.fold(
       errors => {
-        BadRequest(Json.obj("message" -> JsError.toJson(errors)))
+        Future(BadRequest(Json.obj("message" -> JsError.toJson(errors))))
       },
       u => {
-        userService.login(u)
-        val token = authService.encode(u)
-        Ok("Token: " + token)
+        userService.login(u).map {
+          case Some(user) =>
+            val token = authService.encode(user)
+            Ok(s"Token: $token")
+          case None => BadRequest("Wrong credentials")
+        }
       }
     )
   }
 
   def addUser() = Action(parse.json) { implicit request =>
-    /*UserForm.formReg.bindFromRequest().fold(
-      errorForm => {
-        Future.successful(Ok(views.html.index(errorForm)))
-      },
-      user => {
-        val newUser = User(0, user.firstName, user.lastName, user.username, user.password, user.birthday)
-        userService.addUser(newUser).map( _ =>
-          Redirect(routes.HomeController.index()))
-      }
-    )*/
-    //  val data = request.body.asJson.getOrElse(Json.obj()).as[User]//(userReads)
     val userResult = request.body.validate[UserDto]
     userResult.fold(
       errors => {
@@ -54,22 +46,28 @@ class UserController @Inject() (cc: ControllerComponents, userService: UserServi
     )
   }
 
-  def updateUser(id: Long) = authAction(parse.json) { implicit request =>
+  def updateUser() = authAction(parse.json) { implicit request =>
     val userRes = request.body.validate[UserDto]
     userRes.fold(
       errors => {
         BadRequest(Json.obj("message" -> JsError.toJson(errors)))
       },
       user => {
-        userService.updateUser(id, user)
+        val us = userService.updateUser(request.user.id, user)
         Ok(Json.obj("message" -> "User updated"))
       }
     )
   }
 
-  def getPersonalInfo(userId: Long) = authAction.async { implicit request =>
-    userService.getPersonalInfo(userId).map { user =>
+  def getPersonalInfo() = authAction.async { implicit request =>
+    userService.getPersonalInfo(request.user.id).map { user =>
       Ok(Json.toJson(user))
+    }
+  }
+
+  def allUsers() = Action.async { implicit request =>
+    userService.getAllUsers().map { users =>
+      Ok(Json.toJson(users))
     }
   }
 
@@ -79,48 +77,24 @@ class UserController @Inject() (cc: ControllerComponents, userService: UserServi
     }
   }
 
-  def addFriend(friendId: Long) = authAction(parse.json) { implicit request =>
-    val friend = request.body.validate[FriendshipDto]
-    friend.fold(
-      errors => {
-        BadRequest(Json.obj("message" -> JsError.toJson(errors)))
-      },
-      user => {
-        userService.addFriend(friendId, user)
-        Ok(Json.obj("message" -> "Friendship added."))
-      }
-    )
+  def addFriend(friendId: Long) = authAction { implicit request =>
+    userService.addFriend(friendId, request.user.id)
+    Ok(Json.obj("message" -> "Friendship added."))
   }
 
-  def acceptFriend(senderId: Long) = authAction(parse.json) { implicit request =>
-    val user = request.body.validate[FriendshipDto]
-    user.fold(
-      errors => {
-        BadRequest(Json.obj("message" -> JsError.toJson(errors)))
-      },
-      u => {
-        userService.acceptFriendship(senderId, u)
-        Ok(Json.obj("message" -> "Friendship accepted."))
-      }
-    )
+  def acceptFriend(senderId: Long) = authAction { implicit request =>
+    userService.acceptFriendship(senderId, request.user.id)
+    Ok(Json.obj("message" -> "Friendship accepted."))
+  }
+
+  def declineFriendship(senderId: Long) = authAction { implicit request =>
+    userService.declineFriendship(senderId, request.user.id)
+    Ok(Json.obj("message" -> "Friendship declined."))
   }
 
   def listFriends(id: Long) = authAction.async { implicit request =>
-    userService.listFriends(id).map( friends =>
+    userService.listFriends(id).map(friends =>
       Ok(Json.toJson(friends)))
-  }
-
-  def declineFriendship(senderId: Long) = authAction(parse.json) { implicit request =>
-    val user = request.body.validate[FriendshipDto]
-    user.fold(
-      errors => {
-        BadRequest(Json.obj("message" -> JsError.toJson(errors)))
-      },
-      u => {
-        userService.declineFriendship(senderId, u)
-        Ok(Json.obj("message" -> "Friendship declined."))
-      }
-    )
   }
 
   def upload(userId: Long) = authAction(parse.multipartFormData) { implicit request =>
@@ -133,7 +107,6 @@ class UserController @Inject() (cc: ControllerComponents, userService: UserServi
         Ok("File uploaded")
       }
       .getOrElse {
-        //Redirect(routes.HomeController.index()).flashing("error" -> "Missing file")
         BadRequest("Something's wrong")
       }
   }

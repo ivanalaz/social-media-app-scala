@@ -1,9 +1,5 @@
 package models
 
-import dto.UserDto
-import play.api.data.Form
-import play.api.data.Forms._
-import play.api.data.Forms.mapping
 import play.api.db.slick.{DatabaseConfigProvider, HasDatabaseConfigProvider}
 import play.api.libs.json.{Json, OWrites, Reads}
 import slick.jdbc.JdbcProfile
@@ -22,27 +18,6 @@ object User {
   implicit val userReads: Reads[User] = Json.reads[User]
 }
 
-object UserForm {
-  val formReg: Form[UserDto] = Form(
-    mapping(
-      "firstName" -> nonEmptyText,
-      "lastName" -> nonEmptyText,
-      "username" -> nonEmptyText,
-      "password" -> nonEmptyText,
-      "birthday" -> localDate
-    )(UserDto.apply)(UserDto.unapply)
-  )
-  val formLogin: Form[UserDataLogin] = Form(
-    mapping(
-      "username" -> nonEmptyText,
-      "password" -> nonEmptyText
-    )(UserDataLogin.apply)(UserDataLogin.unapply)
-  )
-}
-
-// login
-case class UserDataLogin(username: String, password: String)
-
 class UserTable(tag: Tag) extends Table[User](tag, "user") {
   def userId = column[Long]("userID", O.PrimaryKey, O.AutoInc)
   def firstName = column[String]("first_name")
@@ -58,8 +33,8 @@ class Users @Inject() (val dbConfigProvider: DatabaseConfigProvider)(implicit ec
 
   val users = TableQuery[UserTable]
 
-  def login(username: String, password: String): Future[Option[User]] = db.run {
-    users.filter(u => u.username === username && u.password === password).result.headOption
+  def login(username: String, password: String): Future[Option[User]] = {
+    db.run(users.filter(u => u.username.like(username) && u.password.like(password)).result.headOption)
   }
 
   def add(user: User): Future[String] = db.run {
@@ -72,6 +47,14 @@ class Users @Inject() (val dbConfigProvider: DatabaseConfigProvider)(implicit ec
 
   def getUser(id: Long): Future[Option[User]] = db.run {
     users.filter(_.userId === id).result.headOption
+  }
+
+  def getAllUsers(): Future[Seq[User]] = db.run {
+    users.result
+  }
+
+  def findByUsername(username: String): Future[Option[User]] = db.run {
+    users.filter(_.username === username).result.headOption
   }
 
   def searchUsers(name: String): Future[Seq[User]] = db.run {

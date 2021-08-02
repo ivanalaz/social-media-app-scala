@@ -2,6 +2,7 @@ package auth
 
 import com.auth0.jwk.UrlJwkProvider
 import dto.LoginDto
+import models.{User, Users}
 import pdi.jwt.{JwtAlgorithm, JwtBase64, JwtClaim, JwtJson}
 import play.api.Configuration
 
@@ -9,7 +10,11 @@ import java.time.Clock
 import javax.inject.Inject
 import scala.util.{Failure, Success, Try}
 
-class AuthService @Inject()(config: Configuration){
+class AuthService @Inject()(config: Configuration, users: Users){
+
+  def findByUsername(username: String) = {
+    users.findByUsername(username)
+  }
 
   private val jwtRegex = """(.+?)\.(.+?)\.(.+?)""".r
 
@@ -56,7 +61,7 @@ class AuthService @Inject()(config: Configuration){
   val secretKey      = "secret key"
   val algo           = JwtAlgorithm.HS256
 
-  def encode(user: LoginDto): String = {
+  def encode(user: User) = {
     val claim = JwtClaim(
       issuer = Some("SocialNetwork"),
       subject = Some(user.username)
@@ -64,10 +69,10 @@ class AuthService @Inject()(config: Configuration){
     JwtJson.encode(claim, secretKey, algo)
   }
 
-  def decode(token: String): Any = {
+  def decode(token: String) = {
     JwtJson.decode(token, secretKey, Seq(algo)) match {
       case Success(claim) => claim.subject.get
-      case Failure(_)     => new Exception("Token does not match the correct pattern")
+      case Failure(_)     => "Token does not match the correct pattern"
     }
   }
 }

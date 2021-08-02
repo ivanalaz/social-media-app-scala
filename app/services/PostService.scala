@@ -1,6 +1,6 @@
 package services
 
-import dto.PostDto
+import dto.{PostDisplayDto, PostDto}
 import models.{Post, Posts}
 
 import java.sql.Timestamp
@@ -21,11 +21,16 @@ class PostService @Inject() (posts: Posts) {
     posts.editPost(postId, post)
   }
 
-  def listPostsByUser(userId: Long): Future[Seq[PostDto]] = {
-    posts.listPostsByUser(userId).map(_.map(post => PostDto(post.content, post.created.toLocalDateTime, post.userId)))
+  def listPostsByUser(userId: Long) = {
+    posts.listPostsByUser(userId).map(_.map(post => post.copy(_4 = post._4.toLocalDateTime)))
   }
 
   def listPostsByFriends(userId: Long): Future[Seq[(Long, (String, String), LocalDateTime, String)]] = {
-    posts.postsByFriends(userId).map(_.map(item => item.copy(_3 = item._3.toLocalDateTime)))
+    posts.postsByFriends(userId).map(_.map(post => post.copy(_3 = post._3.toLocalDateTime)))
+  }
+
+  def allPosts() = {
+    posts.allPosts().map(_.map(post => PostDisplayDto(post._1, post._2, post._3.toLocalDateTime, post._4, post._5, post._6, post._7)))
+   // posts.allPosts().map(_.map(post => post.copy(_3 = post._3.toLocalDateTime)))
   }
 }

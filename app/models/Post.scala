@@ -52,8 +52,20 @@ class Posts @Inject() (val dbConfigProvider: DatabaseConfigProvider)(implicit ec
     posts.filter(_.postId === postId).result.headOption
   }
 
-  def listPostsByUser(userId: Long): Future[Seq[Post]] = db.run {
-    posts.filter(_.userId === userId).result
+  def allPosts() = db.run {
+    val allPosts = for {
+      p <- posts
+      author <- users if p.userId === author.userId
+    } yield (author.firstName, author.lastName, p.created, p.content, author.imageName, p.postId, author.userId)
+    allPosts.sortBy(_._3.desc).result
+  }
+
+  def listPostsByUser(userId: Long): Future[Seq[(Long, String, String, Timestamp, String)]] = db.run {
+    val userPosts = for {
+      p <- posts if p.userId === userId
+      author <- users if p.userId === author.userId
+    } yield (p.postId, author.firstName, author.lastName, p.created, p.content)
+    userPosts.sortBy(_._3.desc).result
   }
 
   def postsByFriends(userId: Long): Future[Seq[(Long, (String, String), Timestamp, String)]] = db.run {

@@ -8,12 +8,11 @@ import services.{LikesService, PostService}
 
 import javax.inject._
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent._
 
 @Singleton
 class PostController @Inject() (cc: ControllerComponents, postService: PostService, likesService: LikesService,  authAction: AuthAction) extends AbstractController(cc) {
 
-  def addPost() = authAction(parse.json) { request =>
+  def addPost() = Action(parse.json) { request =>
     val postResult = request.body.validate[PostDto]
     postResult.fold(
       errors => {
@@ -40,12 +39,7 @@ class PostController @Inject() (cc: ControllerComponents, postService: PostServi
   }
 
   def like(postId: Long) = authAction(parse.json) { implicit request =>
-/*
-    likesService.addLike(LikesDto(postId, userId)) map { like =>
-      Ok(Json.toJson(like))
-    }*/
-
-    val user = request.body.validate[LikesDto]
+   val user = request.body.validate[LikesDto]
     user.fold(
       _ => BadRequest(Json.obj("message" -> "")),
       u => {
@@ -66,8 +60,7 @@ class PostController @Inject() (cc: ControllerComponents, postService: PostServi
     )
   }
 
- // implicit val postWrites: OWrites[Post] = Json.writes[Post]
-  def listPostsByUser(userId: Long) = authAction.async { implicit request =>
+  def listPostsByUser(userId: Long) = Action.async { implicit request =>
     postService.listPostsByUser(userId).map { posts =>
       Ok(Json.toJson(posts))
     }
@@ -78,4 +71,9 @@ class PostController @Inject() (cc: ControllerComponents, postService: PostServi
       Ok(Json.toJson(posts)))
   }
 
+  def allPosts() = Action.async {implicit request =>
+    postService.allPosts().map { posts =>
+      Ok(Json.toJson(posts))
+    }
+  }
 }
