@@ -20,13 +20,13 @@ class UserController @Inject()(cc: ControllerComponents, userService: UserServic
     val login = request.body.validate[LoginDto]
     login.fold(
       errors => {
-        Future(BadRequest(Json.obj("message" -> JsError.toJson(errors))))
+        Future(BadRequest(Json.obj("message" -> "Wrong credentials"/*JsError.toJson(errors)*/)))
       },
       u => {
         userService.login(u).map {
           case Some(user) =>
             val token = authService.encode(user)
-            Ok(s"Token: $token")
+            Ok(token)
           case None => BadRequest("Wrong credentials")
         }
       }
@@ -37,11 +37,11 @@ class UserController @Inject()(cc: ControllerComponents, userService: UserServic
     val userResult = request.body.validate[UserDto]
     userResult.fold(
       errors => {
-        BadRequest(Json.obj("message" -> JsError.toJson(errors)))
+        BadRequest(Json.obj("message" -> /*JsError.toJson(errors)*/ "Fill in the empty fields."))
       },
       user => {
         userService.addUser(user)
-        Ok(Json.obj("message" -> "User added."))
+        Ok(Json.obj("message" -> "You've registered successfully."))
       }
     )
   }
@@ -53,14 +53,20 @@ class UserController @Inject()(cc: ControllerComponents, userService: UserServic
         BadRequest(Json.obj("message" -> JsError.toJson(errors)))
       },
       user => {
-        val us = userService.updateUser(request.user.id, user)
+        userService.updateUser(request.user.id, user)
         Ok(Json.obj("message" -> "User updated"))
       }
     )
   }
 
-  def getPersonalInfo() = authAction.async { implicit request =>
+  def getLoggedUser() = authAction.async { implicit request =>
     userService.getPersonalInfo(request.user.id).map { user =>
+      Ok(Json.toJson(user))
+    }
+  }
+
+  def getPersonalInfo(userId: Long) = authAction.async { implicit request =>
+    userService.getPersonalInfo(userId).map { user =>
       Ok(Json.toJson(user))
     }
   }
@@ -83,7 +89,7 @@ class UserController @Inject()(cc: ControllerComponents, userService: UserServic
   }
 
   def acceptFriend(senderId: Long) = authAction { implicit request =>
-    userService.acceptFriendship(senderId, request.user.id)
+    val r = userService.acceptFriendship(senderId, request.user.id)
     Ok(Json.obj("message" -> "Friendship accepted."))
   }
 
@@ -92,18 +98,38 @@ class UserController @Inject()(cc: ControllerComponents, userService: UserServic
     Ok(Json.obj("message" -> "Friendship declined."))
   }
 
-  def listFriends(id: Long) = authAction.async { implicit request =>
-    userService.listFriends(id).map(friends =>
+  def removeFriend(friendId: Long) = authAction { implicit request =>
+    userService.removeFriend(friendId, request.user.id)
+    Ok(Json.obj("message" -> "Friend removed."))
+  }
+
+  def listFriends() = authAction.async { implicit request =>
+    userService.listFriends(request.user.id).map(friends =>
       Ok(Json.toJson(friends)))
   }
 
-  def upload(userId: Long) = authAction(parse.multipartFormData) { implicit request =>
+  def addedFriends() = authAction.async { implicit request =>
+    userService.addedFriends(request.user.id).map(friends =>
+      Ok(Json.toJson(friends)))
+  }
+
+  def friendRequests() = authAction.async { implicit request =>
+    userService.friendRequests(request.user.id).map(friends =>
+      Ok(Json.toJson(friends)))
+  }
+
+  def listNotFriends() = authAction.async { implicit request =>
+    userService.listNotFriends(request.user.id).map(friends =>
+      Ok(Json.toJson(friends)))
+  }
+
+  def upload() = authAction(parse.multipartFormData) { implicit request =>
     request.body
       .file("picture")
       .map { picture =>
         val imageName = Paths.get(picture.filename).getFileName
-        userService.addImage(userId, imageName.toString)
-        picture.ref.moveTo(Paths.get(s"./public/images/$imageName"), replace = true)
+        userService.addImage(request.user.id, imageName.toString)
+        picture.ref.moveTo(Paths.get(s"C:/Users/RS/social-network-app/src/assets/$imageName"), replace = true)
         Ok("File uploaded")
       }
       .getOrElse {

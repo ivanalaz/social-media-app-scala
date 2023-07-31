@@ -2,7 +2,9 @@ package dto
 
 import play.api.libs.json.{Json, OFormat, Reads, Writes}
 
-case class UserDto(firstName: String, lastName: String, username: String, password: String/* birthday: LocalDate*/)
+import java.time.LocalDate
+
+case class UserDto(firstName: String, lastName: String, username: String, password: String, birthday: LocalDate)
 
 object UserDto {
   implicit val userFormat: OFormat[UserDto] = Json.format[UserDto]

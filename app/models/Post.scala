@@ -21,6 +21,7 @@ object Post {
   implicit val timestampWrites: Writes[Timestamp] = {
     implicitly[Writes[Long]].contramap(_.getTime)
   }
+  // Use a default JSON formatter for the Post type
   implicit val postFormat: OFormat[Post] = Json.format[Post]
   implicit val postWrites: OWrites[Post] = Json.writes[Post]
 
@@ -34,14 +35,14 @@ class PostTable(tag: Tag) extends Table[Post](tag, "post") {
   override def * = (postId, content, created, userId) <> ((Post.apply _).tupled, Post.unapply)
 }
 
-class Posts @Inject() (val dbConfigProvider: DatabaseConfigProvider)(implicit ec: ExecutionContext) extends HasDatabaseConfigProvider[JdbcProfile] {
+class PostRepository @Inject()(val dbConfigProvider: DatabaseConfigProvider)(implicit ec: ExecutionContext) extends HasDatabaseConfigProvider[JdbcProfile] {
 
   val posts = TableQuery[PostTable]
   val friends = TableQuery[FriendshipTable]
   val users = TableQuery[UserTable]
 
   def add(post: Post): Future[String] = db.run {
-    (posts += post).map(_ => "Post successfully added")
+    (posts += post).map(_ => "Post successfully added.")
   }
 
   def editPost(postId: Long, post: Post): Future[Int] = db.run {
@@ -52,7 +53,11 @@ class Posts @Inject() (val dbConfigProvider: DatabaseConfigProvider)(implicit ec
     posts.filter(_.postId === postId).result.headOption
   }
 
-  def allPosts() = db.run {
+  def deletePost(postId: Long): Future[Int] = db.run {
+    posts.filter(_.postId === postId).delete
+  }
+
+  def allPosts(): Future[Seq[(String, String, Timestamp, String, String, Long, Long)]] = db.run {
     val allPosts = for {
       p <- posts
       author <- users if p.userId === author.userId
@@ -60,15 +65,15 @@ class Posts @Inject() (val dbConfigProvider: DatabaseConfigProvider)(implicit ec
     allPosts.sortBy(_._3.desc).result
   }
 
-  def listPostsByUser(userId: Long): Future[Seq[(Long, String, String, Timestamp, String)]] = db.run {
+  def listPostsByUser(userId: Long): Future[Seq[(String, String, Timestamp, String, String, Long, Long)]] = db.run {
     val userPosts = for {
       p <- posts if p.userId === userId
       author <- users if p.userId === author.userId
-    } yield (p.postId, author.firstName, author.lastName, p.created, p.content)
+    } yield (author.firstName, author.lastName, p.created, p.content, author.imageName, p.postId, author.userId)
     userPosts.sortBy(_._3.desc).result
   }
 
-  def postsByFriends(userId: Long): Future[Seq[(Long, (String, String), Timestamp, String)]] = db.run {
+  def postsByFriends(userId: Long): Future[Seq[(String, String, Timestamp, String, String, Long, Long)]] = db.run {
     val friendsPosts = for {
       f <- friends
       r <- users if f.receiverId === r.userId
@@ -76,11 +81,11 @@ class Posts @Inject() (val dbConfigProvider: DatabaseConfigProvider)(implicit ec
       if f.confirmed === 1
       if r.userId === userId || s.userId === userId
       p <- posts
-      if p.userId =!= userId && (p.userId === r.userId || p.userId === s.userId)
+      if p.userId === userId || (p.userId === r.userId || p.userId === s.userId)
       author <- users
       if p.userId === author.userId
     } yield
-      (p.userId, (author.firstName, author.lastName), p.created, p.content)
-    friendsPosts.sortBy(_._3.desc).result
+      (author.firstName, author.lastName, p.created, p.content, author.imageName, p.postId, author.userId)
+    friendsPosts.sortBy(_._3.desc).distinct.result
   }
 }

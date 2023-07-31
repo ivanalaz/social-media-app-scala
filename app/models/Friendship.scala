@@ -22,7 +22,7 @@ class FriendshipTable(tag: Tag) extends Table[Friendship](tag, "friends") {
   override def * = (senderId, receiverId, confirmed) <> ((Friendship.apply _).tupled, Friendship.unapply)
 }
 
-class Friendships @Inject() (val dbConfigProvider: DatabaseConfigProvider)(implicit ec: ExecutionContext) extends HasDatabaseConfigProvider[JdbcProfile] {
+class FriendshipRepository @Inject()(val dbConfigProvider: DatabaseConfigProvider)(implicit ec: ExecutionContext) extends HasDatabaseConfigProvider[JdbcProfile] {
   val friends = TableQuery[FriendshipTable]
   val users = TableQuery[UserTable]
 
@@ -38,18 +38,60 @@ class Friendships @Inject() (val dbConfigProvider: DatabaseConfigProvider)(impli
     friends.filter(_.senderId === senderId).filter(_.receiverId === receiverId).delete
   }
 
-  def listFriends(userId: Long): Future[Seq[(Int, (Long, String, String, String), (Long, String, String, String))]] = db.run {
-    val detailedFriendships = for {
-      f <- friends
-      r <- users if f.receiverId === r.userId
-      s <- users if f.senderId === s.userId
-      if f.confirmed === 1
-      if r.userId === userId || s.userId === userId
-    } yield (
-      f.confirmed,
-      (s.userId, s.firstName, s.lastName, s.username),
-      (r.userId, r.firstName, r.lastName, r.username)
-    )
-    detailedFriendships.result
+  def removeFriend(senderId: Long, receiverId: Long): Future[Int] = db.run {
+    friends.filter(f => f.senderId === senderId || f.receiverId === senderId)
+      .filter(f => f.senderId === receiverId || f.receiverId === receiverId).delete
+  }
+
+  def listFriends(userId: Long) = db.run {
+    sql"""SELECT u.userId, u.first_name, u.last_name, u.image
+          FROM user u
+          WHERE userID <> $userId
+          AND EXISTS(
+              SELECT 1
+              FROM friends f
+              WHERE ((f.userID = $userId AND f.friendID = u.userID)
+              OR (f.friendID = $userId AND f.userID = u.userID))
+              AND confirmed = 1
+              )""".as[(Long, String, String, String)]
+  }
+
+  def addedFriends(userId: Long) = db.run {
+    sql"""SELECT u.userId, u.first_name, u.last_name, u.image
+          FROM user u
+          WHERE userID <> $userId
+          AND EXISTS(
+              SELECT 1
+              FROM friends f
+              WHERE (f.userID = $userId AND f.friendID = u.userID)
+              AND confirmed = 0
+              )""".as[(Long, String, String, String)]
+  }
+
+  def friendRequests(userId: Long) = db.run {
+    sql"""SELECT u.userId, u.first_name, u.last_name, u.image
+          FROM user u
+          WHERE userID <> $userId
+          AND EXISTS(
+              SELECT 1
+              FROM friends f
+              WHERE (f.friendID = $userId AND f.userID = u.userID)
+              AND confirmed = 0
+              )""".as[(Long, String, String, String)]
+  }
+
+  def notFriends(userId: Long) = db.run {
+    sql"""SELECT u2.userID, u2.first_name, u2.last_name, u2.image
+          FROM user u1, user u2
+          WHERE NOT EXISTS(SELECT 1
+                 FROM friends f
+                 WHERE f.userID = u1.userID AND
+                       f.friendID = u2.userID)
+          AND NOT EXISTS(SELECT 1
+                 FROM friends f
+                 WHERE f.userID = u2.userID AND
+                       f.friendID = u1.userID)
+          AND u1.userID != u2.userID
+          AND u1.userID = $userId""".as[(Long, String, String, String)]
   }
 }

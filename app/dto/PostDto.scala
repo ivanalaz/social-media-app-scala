@@ -4,7 +4,7 @@ import play.api.libs.json.{Json, OWrites, Reads}
 
 import java.time.LocalDateTime
 
-case class PostDto(content: String, userId: Long)
+case class PostDto(content: String/*, userId: Long*/)
 
 object PostDto {
   implicit val postReads: Reads[PostDto] = Json.reads[PostDto]

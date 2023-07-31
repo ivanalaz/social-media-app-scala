@@ -29,7 +29,7 @@ class UserTable(tag: Tag) extends Table[User](tag, "user") {
   override def * =  (userId, firstName, lastName, username, password, birthday, imageName) <> ((User.apply _).tupled, User.unapply)
 }
 
-class Users @Inject() (val dbConfigProvider: DatabaseConfigProvider)(implicit ec: ExecutionContext) extends HasDatabaseConfigProvider[JdbcProfile] {
+class UserRepository @Inject()(val dbConfigProvider: DatabaseConfigProvider)(implicit ec: ExecutionContext) extends HasDatabaseConfigProvider[JdbcProfile] {
 
   val users = TableQuery[UserTable]
 
@@ -58,7 +58,8 @@ class Users @Inject() (val dbConfigProvider: DatabaseConfigProvider)(implicit ec
   }
 
   def searchUsers(name: String): Future[Seq[User]] = db.run {
-    users.filter(u => u.firstName.toLowerCase.like(s"%${name.toLowerCase}%") ||
+    users.filter(u => u.firstName.toLowerCase.like
+    (s"%${name.toLowerCase}%") ||
       u.lastName.toLowerCase.like(s"${name.toLowerCase}%")).result
   }
 

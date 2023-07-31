@@ -2,7 +2,7 @@ package auth
 
 import com.auth0.jwk.UrlJwkProvider
 import dto.LoginDto
-import models.{User, Users}
+import models.{User, UserRepository}
 import pdi.jwt.{JwtAlgorithm, JwtBase64, JwtClaim, JwtJson}
 import play.api.Configuration
 
@@ -10,7 +10,7 @@ import java.time.Clock
 import javax.inject.Inject
 import scala.util.{Failure, Success, Try}
 
-class AuthService @Inject()(config: Configuration, users: Users){
+class AuthService @Inject()(config: Configuration, users: UserRepository){
 
   def findByUsername(username: String) = {
     users.findByUsername(username)

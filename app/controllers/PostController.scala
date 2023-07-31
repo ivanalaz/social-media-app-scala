@@ -1,7 +1,7 @@
 package controllers
 
 import auth.AuthAction
-import dto.{LikesDto, PostDto}
+import dto.PostDto
 import play.api.libs.json.{JsError, Json}
 import play.api.mvc.{AbstractController, ControllerComponents}
 import services.{LikesService, PostService}
@@ -12,62 +12,65 @@ import scala.concurrent.ExecutionContext.Implicits.global
 @Singleton
 class PostController @Inject() (cc: ControllerComponents, postService: PostService, likesService: LikesService,  authAction: AuthAction) extends AbstractController(cc) {
 
-  def addPost() = Action(parse.json) { request =>
+  def addPost() = authAction(parse.json) { implicit request =>
     val postResult = request.body.validate[PostDto]
     postResult.fold(
       errors => {
         BadRequest(Json.obj("message" -> JsError.toJson(errors)))
       },
       post => {
-        postService.addPost(post, post.userId)
+        postService.addPost(post, request.user.id)
         Ok(Json.obj("message" -> "Post added."))
       }
     )
   }
 
-  def editPost(postId: Long) = authAction(parse.json) { request =>
+  def editPost(postId: Long) = authAction(parse.json) { implicit request =>
     val postRes = request.body.validate[PostDto]
     postRes.fold(
       errors => {
         BadRequest(Json.obj("message" -> JsError.toJson(errors)))
       },
       post => {
-        postService.editPost(postId, post)
+        postService.editPost(postId, request.user.id, post)
         Ok(Json.obj("message" -> "Post edited."))
       }
     )
   }
 
-  def like(postId: Long) = authAction(parse.json) { implicit request =>
-   val user = request.body.validate[LikesDto]
-    user.fold(
-      _ => BadRequest(Json.obj("message" -> "")),
-      u => {
-        likesService.addLike(postId,u)
-        Ok(Json.obj("message" -> "Like added"))
-      }
-    )
+  def deletePost(postId: Long) = authAction { implicit request =>
+    postService.deletePost(postId)
+    Ok(Json.obj("message" -> "Post deleted."))
   }
 
-  def dislike(postId: Long) = authAction(parse.json) { implicit request =>
-    val user = request.body.validate[LikesDto]
-    user.fold(
-      _ => BadRequest(Json.obj("message" -> "")),
-      u => {
-        likesService.dislike(postId,u)
-        Ok(Json.obj("message" -> "Disliked"))
-      }
-    )
+  def like(postId: Long) = authAction { implicit request =>
+    likesService.addLike(postId, request.user.id)
+    Ok(Json.obj("message" -> "Like added"))
   }
 
-  def listPostsByUser(userId: Long) = Action.async { implicit request =>
+  def dislike(postId: Long) = authAction { implicit request =>
+    likesService.dislike(postId, request.user.id)
+    Ok(Json.obj("message" -> "Disliked"))
+  }
+
+  def likedPostsByUser() = authAction.async { implicit request =>
+    likesService.likedPostsByUser(request.user.id).map(posts =>
+      Ok(Json.toJson(posts)))
+  }
+
+  def numberOfLikes(postId: Long) = Action.async { implicit request =>
+    likesService.numberOfLikes(postId).map(number =>
+    Ok(Json.toJson(number)))
+  }
+
+  def listPostsByUser(userId: Long) = authAction.async { implicit request =>
     postService.listPostsByUser(userId).map { posts =>
       Ok(Json.toJson(posts))
     }
   }
 
-  def listPostsByFriends(userId: Long) = authAction.async { request =>
-    postService.listPostsByFriends(userId).map( posts =>
+  def listPostsByFriends() = authAction.async { request =>
+    postService.listPostsByFriends(request.user.id).map( posts =>
       Ok(Json.toJson(posts)))
   }
 
